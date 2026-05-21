@@ -7,7 +7,9 @@
     "watch": "tsc -w",
     "clean": "rimraf dist",
     "prestart": "npm run clean && npm run build",
+    "azurite": "azurite --location .azurite --debug .azurite/debug.log",
     "start": "func start",
+    "start:local": "concurrently -k -n AZURITE,FUNC -c yellow,cyan \"npm run azurite\" \"npm run start\"",
     "test": "echo \"No tests yet...\""
   },
   "dependencies": {
@@ -15,6 +17,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.x",
+    "azurite": "^3.35.0",
+    "concurrently": "^9.1.2",
     "typescript": "^5.0.0",
     "rimraf": "^5.0.0"
   },

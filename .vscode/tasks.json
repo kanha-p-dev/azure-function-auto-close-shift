@@ -2,6 +2,13 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "type": "shell",
+      "label": "npm start:local (functions)",
+      "command": "npm run start:local",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
       "type": "func",
       "label": "func: host start",
       "command": "host start",
