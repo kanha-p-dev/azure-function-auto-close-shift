@@ -3,9 +3,6 @@ import * as https from "node:https";
 
 const TIMER_NAME = "autoCloseShiftTimer";
 const TIMER_SCHEDULE = "*/5 * * * * *";
-const AUTO_CLOSE_SHIFT_URL = process.env.AUTO_CLOSE_SHIFT_URL;
-const AUTO_CLOSE_SHIFT_TIMEOUT_MS = parsePositiveInteger(process.env.AUTO_CLOSE_SHIFT_TIMEOUT_MS, 15000, "AUTO_CLOSE_SHIFT_TIMEOUT_MS");
-const AUTO_CLOSE_SHIFT_CONCURRENCY = parsePositiveInteger(process.env.AUTO_CLOSE_SHIFT_CONCURRENCY, 5, "AUTO_CLOSE_SHIFT_CONCURRENCY");
 const RESPONSE_PREVIEW_LIMIT = 240;
 
 let runCount = 0;
@@ -16,6 +13,12 @@ class HttpStatusError extends Error {
         this.name = "HttpStatusError";
     }
 }
+
+type AutoCloseShiftConfig = {
+    url: string;
+    timeoutMs: number;
+    concurrency: number;
+};
 
 function formatIsoDate(value?: string): string {
     if (!value) {
@@ -39,11 +42,28 @@ function parsePositiveInteger(rawValue: string | undefined, fallback: number, ke
     return parsed;
 }
 
-function buildAutoClosePayload(requestedAt: string): { triggerSource: string; requestedAt: string; concurrency: number } {
+function getRequiredEnv(key: string): string {
+    const value = process.env[key]?.trim();
+    if (!value) {
+        throw new Error(`${key} is required. Set it in local.settings.json or Function App settings.`);
+    }
+
+    return value;
+}
+
+function loadAutoCloseShiftConfig(): AutoCloseShiftConfig {
+    return {
+        url: getRequiredEnv("AUTO_CLOSE_SHIFT_URL"),
+        timeoutMs: parsePositiveInteger(process.env.AUTO_CLOSE_SHIFT_TIMEOUT_MS, 15000, "AUTO_CLOSE_SHIFT_TIMEOUT_MS"),
+        concurrency: parsePositiveInteger(process.env.AUTO_CLOSE_SHIFT_CONCURRENCY, 5, "AUTO_CLOSE_SHIFT_CONCURRENCY")
+    };
+}
+
+function buildAutoClosePayload(requestedAt: string, concurrency: number): { triggerSource: string; requestedAt: string; concurrency: number } {
     return {
         triggerSource: "timer",
         requestedAt,
-        concurrency: AUTO_CLOSE_SHIFT_CONCURRENCY
+        concurrency
     };
 }
 
@@ -107,9 +127,7 @@ async function postJson(url: string, payload: unknown, timeoutMs: number): Promi
 }
 
 export async function autoCloseShiftTimer(timer: Timer, context: InvocationContext): Promise<void> {
-    if (!AUTO_CLOSE_SHIFT_URL) {
-        throw new Error("AUTO_CLOSE_SHIFT_URL is required. Set it in local.settings.json or Function App settings.");
-    }
+    const config = loadAutoCloseShiftConfig();
 
     runCount++;
 
@@ -129,13 +147,13 @@ export async function autoCloseShiftTimer(timer: Timer, context: InvocationConte
     context.log(`Schedule Next: ${next}`);
     context.log(`Schedule Updated: ${lastUpdated}`);
 
-    const payload = buildAutoClosePayload(now);
+    const payload = buildAutoClosePayload(now, config.concurrency);
 
-    context.log(`API URL: ${AUTO_CLOSE_SHIFT_URL}`);
+    context.log(`API URL: ${config.url}`);
     context.log(`API Payload: ${JSON.stringify(payload)}`);
 
     try {
-        const result = await postJson(AUTO_CLOSE_SHIFT_URL, payload, AUTO_CLOSE_SHIFT_TIMEOUT_MS);
+        const result = await postJson(config.url, payload, config.timeoutMs);
         const isSuccess = result.statusCode >= 200 && result.statusCode < 300;
         const responsePreview = compactText(result.body, RESPONSE_PREVIEW_LIMIT);
 
